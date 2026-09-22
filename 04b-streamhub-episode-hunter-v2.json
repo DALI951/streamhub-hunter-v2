@@ -1,0 +1,335 @@
+{
+  "name": "StreamHub Episode Hunter v2 (Mentalist Priority + Groq AI)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "minutes", "minutesInterval": 5 }
+          ]
+        }
+      },
+      "id": "3c0c5d4f-9b72-4f6e-9d34-7a1f2c8b6d51",
+      "name": "Every 5 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://modali.powerpme.com/streamhub/api/home.php?probe=1",
+        "sendHeaders": false,
+        "authentication": "none",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "id": "3c0c5d4f-9b72-4f6e-9d34-7a1f2c8b6d52",
+      "name": "Fetch home",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const st = $getWorkflowStaticData('global');\nst.ledger = st.ledger || {};\nst.queue = st.queue || [];\nst.curSeason = st.curSeason || null;\nst.reports = st.reports || [];\n// ---- build Mentalist priority queue ONCE (S4E21 -> S4 -> S5 -> S6 -> S7) ----\nif (st.queue.length === 0 && !st.queueDone) {\n  const bases = {\n    4: 'https://tv10.egydead.live/episode/%d9%85%d8%b3%d9%84%d8%b3%d9%84-the-mentalist-%d8%a7%d9%84%d9%85%d9%88%d8%b3%d9%85-%d8%a7%d9%84%d8%b1%d8%a7%d8%a8%d8%b9-%d8%a7%d9%84%d8%ad%d9%84%d9%82%d8%a9-',\n    5: 'https://tv10.egydead.live/episode/%d9%85%d8%b3%d9%84%d8%b3%d9%84-the-mentalist-%d8%a7%d9%84%d9%85%d9%88%d8%b3%d9%85-%d8%a7%d9%84%d8%ae%d8%a7%d9%85%d8%b3-%d8%a7%d9%84%d8%ad%d9%84%d9%82%d8%a9-',\n    6: 'https://tv10.egydead.live/episode/%d9%85%d8%b3%d9%84%d8%b3%d9%84-the-mentalist-%d8%a7%d9%84%d9%85%d9%88%d8%b3%d9%85-%d8%a7%d9%84%d8%b3%d8%a7%d8%af%d8%b3-%d8%a7%d9%84%d8%ad%d9%84%d9%82%d8%a9-',\n    7: 'https://tv10.egydead.live/episode/%d9%85%d8%b3%d9%84%d8%b3%d9%84-the-mentalist-%d8%a7%d9%84%d9%85%d9%88%d8%b3%d9%85-%d8%a7%d9%84%d8%b3%d8%a7%d8%a8%d8%b9-%d8%a7%d9%84%d8%ad%d9%84%d9%82%d8%a9-'\n  };\n  const counts = { 4: 24, 5: 22, 6: 22, 7: 13 };\n  for (const s of [4, 5, 6, 7]) {\n    const start = (s === 4) ? 21 : 1;\n    for (let e = start; e <= counts[s]; e++) {\n      st.queue.push({ series: 'The Mentalist', season: s, ep: e, url: bases[s] + e + '/', title: 'The Mentalist', type: 'tv' });\n    }\n  }\n  st.queueDone = true;\n}\n// ---- pop next queued episode, else fall back to newest pool ----\nif (st.queue.length > 0) {\n  const q = st.queue.shift();\n  return [{ json: { name: 'Q:' + q.series + ' S' + q.season + 'E' + q.ep, title: q.title, season: q.season, number: q.ep, epTitle: q.series + ' Season ' + q.season + ' Episode ' + q.ep, url: q.url, type: q.type, key: q.url, _queued: true } }];\n}\n// newest-at-top pool rotation\nst.cursor = st.cursor || 0;\nst.items = st.items || [];\nconst j = $input.first().json;\nconst titles = {};\nfor (const c of (j && Array.isArray(j.categories) ? j.categories : [])) {\n  for (const it of (c.items || [])) {\n    if (!it || !it.url) continue;\n    if (!titles[it.url]) titles[it.url] = { title: it.title || '?', url: it.url, source: it.source || '?' };\n  }\n}\nst.items = Object.values(titles);\nif (st.items.length === 0) return [];\nif (st.cursor >= st.items.length) st.cursor = 0;\nconst pick = st.items[st.cursor];\nst.cursor++;\nreturn [{ json: { name: 'P:', title: pick.title, url: pick.url, source: pick.source, key: pick.url, _queued: false } }];"
+      },
+      "id": "3c0c5d4f-9b72-4f6e-9d34-7a1f2c8b6d53",
+      "name": "Pick next episode",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://modali.powerpme.com/streamhub/api/details.php?url=' + encodeURIComponent($json.url) }}",
+        "sendHeaders": false,
+        "authentication": "none",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "id": "3c0c5d4f-9b72-4f6e-9d34-7a1f2c8b6d54",
+      "name": "Fetch details",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst det = d.details || {};\nconst prev = $('Pick next episode').first().json;\nlet eps = [];\nif (prev._queued) {\n  eps = [{ title: prev.title, epTitle: prev.epTitle, url: prev.url, number: prev.number, season: prev.season, type: 'tv', key: prev.key }];\n} else if (Array.isArray(det.episodes) && det.episodes.length > 0) {\n  eps = det.episodes.map(function (e) {\n    const m = String(e.url || '').match(/[-/]s(\\d+)e(\\d+)/i);\n    return { title: det.title || '?', epTitle: e.title || ('Episode ' + e.number), url: e.url, number: e.number || (m ? parseInt(m[2], 10) : null), season: m ? parseInt(m[1], 10) : prev.season || 1, type: 'tv', key: e.url };\n  });\n} else if (det.url) {\n  const m = String(det.url || '').match(/[-/]s(\\d+)e(\\d+)/i);\n  eps = [{ title: det.title || prev.title || '?', epTitle: det.title || '?', url: det.url, number: m ? parseInt(m[2], 10) : null, season: prev.season || (m ? parseInt(m[1], 10) : 1), type: (det.type || 'movie') === 'episode' ? 'tv' : 'movie', key: det.url }];\n}\nconst st = $getWorkflowStaticData('global');\nconst cutoff = Date.now() - 14 * 24 * 3600 * 1000;\neps = eps.filter(function (e) { const l = st.ledger[e.key]; return !l || l.recheck === true || (l.updated && Date.parse(l.updated) < cutoff); });\nreturn eps.slice(0, 8);"
+      },
+      "id": "3c0c5d4f-9b72-4f6e-9d34-7a1f2c8b6d55",
+      "name": "Extract episodes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "3c0c5d4f-9b72-4f6e-9d34-7a1f2c8b6d56",
+      "name": "Loop episodes",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 1,
+      "position": [1100, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://modali.powerpme.com/streamhub/api/subs.php?q=' + encodeURIComponent($json.title) + '&type=' + ($json.type || 'tv') + '&season=' + ($json.season || 1) + '&episode=' + ($json.number || 1) }}",
+        "sendHeaders": false,
+        "authentication": "none",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "id": "3c0c5d4f-9b72-4f6e-9d34-7a1f2c8b6d57",
+      "name": "Check subs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, -220]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://modali.powerpme.com/streamhub/api/streams.php?url=' + encodeURIComponent($json.url) }}",
+        "sendHeaders": false,
+        "authentication": "none",
+        "responseFormat": "json",
+        "options": {}
+      },
+      "id": "3c0c5d4f-9b72-4f6e-9d34-7a1f2c8b6d58",
+      "name": "Fetch streams",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, 220]
+    },
+    {
+      "parameters": {
+        "jsCode": "const strN = $input.first().json;\nconst streams = Array.isArray(strN.streams) ? strN.streams : [];\n// pick first direct-playable stream (hls/mp4) to probe the REAL resolution; keep its referer (many HLS/CDN servers 403 without the right Referer)\nlet probeUrl = '';\nlet probeRef = '';\nfor (const s of streams) {\n  const u = s.stream_url || '';\n  if (/m3u8|\\.mp4|master|index/i.test(u)) { probeUrl = u; probeRef = s.referer || ''; break; }\n}\nreturn [{ json: { probeUrl: probeUrl, probeRef: probeRef, streamCount: streams.length } }];"
+      },
+      "id": "3c0c5d4f-9b72-4f6e-9d34-7a1f2c8b6d68",
+      "name": "Extract probe URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1540, 220]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false, "leftValue": "{{ $json.probeUrl }}", "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.probeUrl }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty", "singleValue": true }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3c0c5d4f-9b72-4f6e-9d34-7a1f2c8b6d59",
+      "name": "Has probe?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.1,
+      "position": [1760, 220]
+    },
+    {
+      "name": "Probe playlist",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1760, 380],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ encodeURI('https://modali.powerpme.com/streamhub/api/proxy.php?url=' + $json.probeUrl + ($json.probeRef ? '&ref=' + $json.probeRef : '')) }}",
+        "sendHeaders": false,
+        "authentication": "none",
+        "responseFormat": "text",
+        "options": {
+          "neverError": true,
+          "timeout": 90000,
+          "continueOnError": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "let body = '';\ntry { body = String($('Probe playlist').first().json || ''); } catch (e) { body = ''; }\nconst claimed = ($('Fetch streams').first().json.streams || []).map(function(s){ return s.quality_label || s.quality || null; }).filter(Boolean);\nconst resos = [];\nconst re = /RESOLUTION=(\\d+)x(\\d+)/gi; let m;\nwhile ((m = re.exec(body)) !== null) resos.push(parseInt(m[2], 10));\nconst maxH = resos.length ? Math.max.apply(null, resos) : 0;\nlet actual = 'unverified';\nif (maxH >= 1900) actual = '1080p';\nelse if (maxH >= 1230) actual = '720p';\nelse if (maxH >= 820) actual = '480p';\nelse if (maxH > 0) actual = '<=360p';\nconst bestClaim = claimed.map(function(c){ const q = String(c||'').match(/(\\d{3,4})p/); return q ? parseInt(q[1],10) : 0; }).reduce(function(a,b){ return Math.max(a,b); }, 0);\nconst honest = (bestClaim && actual !== 'unverified') ? (maxH >= bestClaim - 1) : null;\nreturn [{ json: { claimed: claimed.join(' | ') || 'none', actual_resolution: actual, max_height: maxH, honest_claim: honest, probe_source: body.slice(0, 80) } }];"
+      },
+      "id": "3c0c5d4f-9b72-4f6e-9d34-7a1f2c8b6d61",
+      "name": "Parse resolution",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1980, 380]
+    },
+    {
+      "parameters": {
+        "jsCode": "let vr = { claimed: 'none', actual_resolution: 'unverified', honest_claim: null };\ntry { vr = $('Parse resolution').first().json; } catch (e) { vr = { claimed: 'none', actual_resolution: 'unverified', honest_claim: null }; }\nconst subsN = try { $('Check subs').first().json } catch (e) { { ok: false, error: 'check subs failed' }; }\nconst strN = try { $('Fetch streams').first().json } catch (e) { { streams: [] } };\nconst ep = try { $json } catch (e) { { key: '?', title: '?', epTitle: '?' } };\nconst streams = Array.isArray(strN?.streams) && strN.streams.length ? strN.streams : [{ provider: 'none', quality: null }];\nconst promptObj = {\n  episode_key: ep.key || '?',\n  show: ep.title || '?',\n  episode: ep.epTitle || '?',\n  arabic_subtitles: subsN && subsN.ok === true ? { found: true, lang: subsN.lang || 'ar' } : { found: false, note: subsN?.error || 'not found' },\n  claimed_quality: vr.claimed || 'none',\n  probed_resolution: vr.actual_resolution || 'unverified',\n  honest_claim: vr.honest_claim || null,\n  providers: streams.map(function (s) { return { name: s.server_name || s.quality_label || '?', quality: s.quality_label || (s.quality ? s.quality + 'p' : 'auto'), url: s.stream_url || '', type: s.stream_type || '' }; })\n};\nreturn [{ json: { prompt: 'You audit Arabic streaming sites for episode quality. Rules: (1) 1080p is REQUIRED if any provider truly delivers it; drop to 720p ONLY in the most extreme scenario; 480p or lower is NEVER acceptable as best. (2) A claim is a LIE if probed_resolution is lower than claimed_quality. (3) Rate each provider watermark_risk low/medium/high (known watermarked players: vidmoly, filemoon, streamwish, dood, vidoza, anything with url containing these; unknown iframe players = medium). (4) best_provider must be truthful + honest + lowest watermark risk. Answer ONLY JSON: {\\\"has_arabic_subs\\\": bool, \\\"best_provider\\\": \\\"string\\\", \\\"best_quality\\\": \\\"verified 1080p\\\" | \\\"verified 720p\\\" | \\\"claimed 1080p unverified\\\" | \\\"claimed 720p unverified\\\", \\\"quality_score\\\": 0-100, \\\"watermark_risk\\\": \\\"low\\\" | \\\"medium\\\" | \\\"high\\\", \\\"verified_peak\\\": bool, \\\"notes\\\": \\\"string\\\"}. Episode data: ' + JSON.stringify(promptObj) } }];"
+      },
+      "id": "3c0c5d4f-9b72-4f6e-9d34-7a1f2c8b6d62",
+      "name": "Build prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2200, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": false,
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'qwen/qwen3.8-27b', temperature: 0, max_tokens: 400, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: 'You return only valid JSON.' }, { role: 'user', content: $json.prompt }] }) }}",
+        "options": {}
+      },
+      "id": "3c0c5d4f-9b72-4f6e-9d34-7a1f2c8b6d63",
+      "name": "Ask Groq",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2420, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "OW0YB15PWA5BPDx0",
+          "name": "Groq API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "let g, verdict = null;\ntry { g = $('Ask Groq').first().json; verdict = JSON.parse(g.choices[0].message.content); } catch (e) { return [{ json: { report: 'no', key: $json.key } }]; }\nconst st = $getWorkflowStaticData('global');\nst.ledger = st.ledger || {}; st.reports = st.reports || [];\nconst ep = $json;\nconst key = ep.key;\nconst prev = st.ledger[key];\nconst peak = !!verdict.verified_peak && verdict.watermark_risk === 'low' && /1080|720/.test(String(verdict.best_quality));\nst.ledger[key] = { score: verdict.quality_score || 0, best_provider: verdict.best_provider || '?', best_quality: verdict.best_quality || '?', subs: !!verdict.has_arabic_subs, wm: verdict.watermark_risk || 'unknown', peak: peak, updated: new Date().toISOString() };\nconst q = String(ep.name || '');\nconst line = (ep.epTitle || ep.episode || key) + ' | best=' + st.ledger[key].best_provider + ' ' + st.ledger[key].best_quality + ' | subs=' + (verdict.has_arabic_subs ? 'yes' : 'NO') + ' | wm=' + st.ledger[key].wm + ' | peak=' + (peak ? 'YES' : 'no');\nst.reports.push({ t: new Date().toISOString(), type: 'episode', text: line });\nlet subject = '', body = '';\nconst isMentalist = /Mentalist S/i.test(q) || (ep.title === 'The Mentalist');\nif (peak) { subject = (isMentalist ? 'Mentalist ' : 'Hunter ') + (ep.epTitle || ep.title) + ': PEAK CONFIRMED'; body = 'PEAK QUALITY VERIFIED\\n' + (ep.epTitle || ep.title) + '\\nSeries: ' + (ep.title || '?') + '\\nBest: ' + st.ledger[key].best_provider + ' (' + st.ledger[key].best_quality + ')\\nArabic subs: ' + (verdict.has_arabic_subs ? 'YES' : 'NO') + '\\nWatermark risk: ' + st.ledger[key].wm + '\\nNotes: ' + (verdict.notes || ''); }\nelse if (prev && !prev.peak && peak) { subject = (isMentalist ? 'Mentalist ' : 'Hunter ') + (ep.epTitle || ep.title) + ': UPGRADED TO PEAK'; body = 'Previously sub-peak, now PEAK:\\n' + (ep.epTitle || ep.title) + '\\nBest: ' + st.ledger[key].best_provider + ' (' + st.ledger[key].best_quality + ')\\nWatermark risk: ' + st.ledger[key].wm; }\nelse if (!peak) { subject = (isMentalist ? 'Mentalist ' : 'Hunter ') + (ep.epTitle || ep.title) + ': NOT PEAK - PROBLEM'; body = 'No verified peak source found!\\n' + (ep.epTitle || ep.title) + '\\nSubs: ' + (verdict.has_arabic_subs ? 'yes' : 'MISSING') + '\\nBest: ' + st.ledger[key].best_provider + ' (' + st.ledger[key].best_quality + ')\\nProbed res: ' + (String(ep.probed) || 'see notes') + '\\nWatermark: ' + st.ledger[key].wm + '\\nNotes: ' + (verdict.notes || ''); }\n// every 10 QUEUED-Mentalist episodes -> sources report\nlet report = '';\nif (ep._queued !== false || ep.title === 'The Mentalist') {\n  st.mCounter = (st.mCounter || 0) + 1;\n  if (st.mCounter % 10 === 0) {\n    const last10 = st.reports.slice(-10).map(function (r) { return '- ' + r.text; }).join('\\n');\n    report = 'SOURCES REPORT (last 10 episodes)\\n' + last10;\n    st.reports.push({ t: new Date().toISOString(), type: 'report10', text: report });\n  }\n}\n// per-season report\nif (ep.season && st.curSeason && st.curSeason !== ep.season) {\n  const prevSeason = st.curSeason;\n  const lines = st.reports.filter(function (r) { return /Season ' + prevSeason + ' /i.test(r.text + '') || false; }).map(function (r) { return '- ' + r.text; });\n  report = report + (report ? '\\n\\n' : '') + 'SEASON ' + prevSeason + ' FULL REPORT (' + prevSeason + ')\\n' + (lines.slice(0, 40).join('\\n') || 'no episodes recorded');\n  st.reports.push({ t: new Date().toISOString(), type: 'season', text: report });\n  st.curSeasonReported = prevSeason;\n}\nif (ep.season) st.curSeason = ep.season;\nst.reports = st.reports.slice(-500);\nif (!report && !subject) return [{ json: { report: 'no', key: key } }];\nif (!subject) { subject = 'STREAMHUB HUNTER REPORT'; body = report; }\nelse if (report) { body = body + '\\n\\n---\\n' + report; }\nreturn [{ json: { report: 'yes', subject: subject, body: body, key: key } }];"
+      },
+      "id": "3c0c5d4f-9b72-4f6e-9d34-7a1f2c8b6d64",
+      "name": "Parse + ledger",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2640, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false, "leftValue": "{{ $json.report }}", "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.report }}",
+              "rightValue": "yes",
+              "operator": { "type": "string", "operation": "equals", "singleValue": true }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3c0c5d4f-9b72-4f6e-9d34-7a1f2c8b6d65",
+      "name": "New find?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.1,
+      "position": [2860, 0]
+    },
+    {
+      "parameters": {
+        "fromEmail": "ddalilo060@gmail.com",
+        "toEmail": "minod9349@gmail.com",
+        "subject": "={{ $json.subject }}",
+        "emailFormat": "text",
+        "text": "={{ $json.body }}",
+        "options": {}
+      },
+      "id": "3c0c5d4f-9b72-4f6e-9d34-7a1f2c8b6d66",
+      "name": "Alert Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [3080, -140],
+      "credentials": {
+        "smtp": {
+          "id": "rpKrKOhO2C4DhLHw",
+          "name": "StreamHub Gmail SMTP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(function (i) { return { json: { looped: true } }; });"
+      },
+      "id": "3c0c5d4f-9b72-4f6e-9d34-7a1f2c8b6d67",
+      "name": "Next item",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3080, 140]
+    }
+  ],
+  "connections": {
+    "Every 5 min": {
+      "main": [[{ "node": "Fetch home", "type": "main", "index": 0 }]]
+    },
+    "Fetch home": {
+      "main": [[{ "node": "Pick next episode", "type": "main", "index": 0 }]]
+    },
+    "Pick next episode": {
+      "main": [[{ "node": "Fetch details", "type": "main", "index": 0 }]]
+    },
+    "Fetch details": {
+      "main": [[{ "node": "Extract episodes", "type": "main", "index": 0 }]]
+    },
+    "Extract episodes": {
+      "main": [[{ "node": "Loop episodes", "type": "main", "index": 0 }]]
+    },
+    "Loop episodes": {
+      "main": [
+        [
+          { "node": "Check subs", "type": "main", "index": 0 },
+          { "node": "Fetch streams", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Check subs": {
+      "main": [[{ "node": "Build prompt", "type": "main", "index": 0 }]]
+    },
+    "Fetch streams": {
+      "main": [[{ "node": "Extract probe URL", "type": "main", "index": 0 }]]
+    },
+    "Extract probe URL": {
+      "main": [[{ "node": "Has probe?", "type": "main", "index": 0 }]]
+    },
+    "Has probe?": {
+      "main": [
+        [{ "node": "Probe playlist", "type": "main", "index": 0 }],
+        [{ "node": "Parse resolution", "type": "main", "index": 0 }]
+      ]
+    },
+    "Probe playlist": {
+      "main": [[{ "node": "Parse resolution", "type": "main", "index": 0 }]]
+    },
+    "Parse resolution": {
+      "main": [[{ "node": "Build prompt", "type": "main", "index": 0 }]]
+    },
+    "Build prompt": {
+      "main": [[{ "node": "Ask Groq", "type": "main", "index": 0 }]]
+    },
+    "Ask Groq": {
+      "main": [[{ "node": "Parse + ledger", "type": "main", "index": 0 }]]
+    },
+    "Parse + ledger": {
+      "main": [[{ "node": "New find?", "type": "main", "index": 0 }]]
+    },
+    "New find?": {
+      "main": [
+        [{ "node": "Alert Email", "type": "main", "index": 0 }],
+        [{ "node": "Next item", "type": "main", "index": 0 }]
+      ]
+    },
+    "Alert Email": {
+      "loop": [[{ "node": "Loop episodes", "type": "main", "index": 0 }]]
+    },
+    "Next item": {
+      "loop": [[{ "node": "Loop episodes", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {},
+  "pinData": {},
+  "active": false
+}
