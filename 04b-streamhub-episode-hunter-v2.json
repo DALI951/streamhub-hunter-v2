@@ -149,9 +149,12 @@
         "authentication": "none",
         "responseFormat": "text",
         "options": {
-          "neverError": true,
           "timeout": 90000,
-          "continueOnError": true
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
         }
       }
     },
